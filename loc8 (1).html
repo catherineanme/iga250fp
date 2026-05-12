@@ -1,0 +1,1212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>loc8 · digital twin</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+
+:root {
+  --bg-deep:#FFFFFF; --bg-base:#FFFFFF; --bg-elev:#F5F5F5; --bg-elev2:#EAEAEA;
+  --line:#DADADA; --line-strong:#BDBDBD;
+  --text:#111111; --text-2:#444444; --text-3:#777777;
+  --truth:#D4A017; --estimate:#3E6B8A;
+  --vpr:#6F8F3A; --trn:#4A78A8; --magnav:#A8632F; --coast:#EF4444;
+  --display:'Times New Roman',Times,serif; --mono:'Times New Roman',Times,serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#FFFFFF;color:var(--text);font-family:'Times New Roman',Times,serif;font-size:13px;line-height:1.5;overflow:auto;letter-spacing:.01em;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit;font-size:inherit}
+
+.app{display:grid;grid-template-columns:300px 1fr 280px;grid-template-rows:56px minmax(420px,1fr) auto;min-height:100vh;gap:1px;background:var(--line)}
+.header{grid-column:1/-1;background:var(--bg-base);display:flex;justify-content:space-between;align-items:center;padding:0 18px;border-bottom:1px solid var(--line)}
+.brand{font-family:var(--display);font-weight:900;font-size:22px;letter-spacing:-.02em}
+.brand-sub{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.15em;margin-top:1px}
+.hdr-status{display:flex;gap:24px;align-items:center}
+.hdr-item{display:flex;flex-direction:column;align-items:flex-end}
+.hdr-label{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.18em}
+.hdr-val{font-size:13px;font-weight:600;color:var(--text)}
+.left,.right{background:var(--bg-base);overflow:visible;padding:18px}
+.bottom{grid-column:1/-1;background:var(--bg-base);border-top:1px solid var(--line);padding:12px 18px;overflow:visible}
+.map-wrap{position:relative;background:var(--bg-deep)}
+#map{position:absolute;inset:0}
+.bottom-grid{display:grid;grid-template-columns:320px 1fr;gap:18px}
+
+.section{margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.section:last-child{border-bottom:none}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--text-2)}
+.section-tag{color:var(--text-3);font-size:9px}
+
+.field{margin-bottom:10px}
+.field-label{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;display:flex;justify-content:space-between}
+.field input[type=number]{width:100%;background:var(--bg-elev);border:1px solid var(--line);color:var(--text);padding:6px 8px;font-family:var(--mono);font-size:12px;border-radius:2px;outline:none;-moz-appearance:textfield;appearance:textfield}
+.field input[type=number]:focus{border-color:var(--estimate)}
+.field input[type=number].invalid{border-color:var(--coast);background:#FEE7E7}
+.field input[type=number]::-webkit-outer-spin-button,
+.field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.field input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:4px;background:var(--bg-elev2);border-radius:2px;outline:none}
+.field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--estimate);border-radius:50%;cursor:pointer}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.toggle-row{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.toggle{width:36px;height:20px;background:var(--bg-elev2);border-radius:10px;position:relative;cursor:pointer;transition:background .15s}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;background:var(--text-3);border-radius:50%;transition:all .15s}
+.toggle.on{background:var(--vpr)}
+.toggle.on::after{left:18px;background:var(--text)}
+
+.btn-arm{width:100%;padding:14px;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--text);font-family:var(--mono);font-weight:600;font-size:12px;letter-spacing:.18em;text-transform:uppercase;border-radius:2px;transition:all .15s}
+.btn-arm:hover:not(:disabled){background:var(--vpr);border-color:var(--vpr);color:var(--bg-deep)}
+.btn-arm:disabled{opacity:.5;cursor:not-allowed}
+.btn-arm.flying{background:var(--estimate);border-color:var(--estimate);color:var(--bg-deep)}
+.btn-secondary{width:100%;padding:10px;background:var(--bg-base);border:1px solid var(--line-strong);color:var(--text);font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;border-radius:2px;margin-top:8px;transition:all .15s}
+.btn-secondary:hover:not(:disabled){background:var(--bg-elev);border-color:var(--text)}
+.btn-secondary:disabled{opacity:.5;cursor:not-allowed}
+.btn-mini{padding:6px 8px;background:var(--bg-base);border:1px solid var(--line);color:var(--text-2);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;border-radius:2px;cursor:pointer;transition:all .12s}
+.btn-mini:hover{background:var(--bg-elev);border-color:var(--text-2);color:var(--text)}
+.preset-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px}
+
+details.advanced{margin-top:6px}
+details.advanced > summary{cursor:pointer;font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:var(--text-2);padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px;border-top:1px dashed var(--line)}
+details.advanced > summary::-webkit-details-marker{display:none}
+details.advanced > summary::before{content:'▸';font-size:9px;color:var(--text-3)}
+details.advanced[open] > summary::before{content:'▾'}
+details.advanced > .advanced-body{padding-top:6px}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--bg-elev);padding:8px 10px;border-radius:2px}
+.stat-label{font-size:9px;color:var(--text-3);text-transform:uppercase;letter-spacing:.15em}
+.stat-val{font-size:18px;font-family:var(--display);font-weight:700;color:var(--text);margin-top:2px}
+.stat-unit{font-size:10px;color:var(--text-3);margin-left:3px;font-family:var(--mono);font-weight:400}
+
+.cascade-legend{display:flex;flex-direction:column;gap:4px;font-size:10px}
+.cascade-row{display:flex;align-items:center;gap:6px;color:var(--text-2)}
+.cascade-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cascade-swatch.vpr{background:var(--vpr)}
+.cascade-swatch.trn{background:var(--trn)}
+.cascade-swatch.magnav{background:var(--magnav)}
+.cascade-swatch.coast{background:var(--coast)}
+.cascade-tier{font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.08em;font-size:9px;min-width:48px}
+
+.cp-list{display:flex;flex-direction:column;gap:4px}
+.cp-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:6px 8px;background:var(--bg-elev);border-radius:2px;font-size:11px;align-items:center}
+.cp-dot{width:8px;height:8px;border-radius:50%}
+.cp-dot.vpr{background:var(--vpr)}
+.cp-dot.trn{background:var(--trn)}
+.cp-dot.magnav{background:var(--magnav)}
+.cp-dot.coast{background:var(--coast)}
+.cp-name{color:var(--text-2)}
+.cp-err{color:var(--text);font-weight:600}
+
+.events{font-size:11px;font-family:var(--mono);display:flex;flex-direction:column;gap:2px}
+.event{display:grid;grid-template-columns:60px 70px 1fr;gap:10px;padding:2px 0;color:var(--text-2)}
+.event-t{color:var(--text-3)}
+.event-tag{text-transform:uppercase;letter-spacing:.1em;font-size:10px;font-weight:600}
+.event-tag.plan{color:var(--text-2)}
+.event-tag.vpr{color:var(--vpr)}
+.event-tag.trn{color:var(--trn)}
+.event-tag.magnav{color:var(--magnav)}
+.event-tag.coast{color:var(--coast)}
+.event-tag.done{color:var(--estimate)}
+
+.empty{color:var(--text-3);font-size:11px;font-style:italic;padding:8px 0}
+
+details.section > summary{cursor:pointer;list-style:none}
+details.section > summary::-webkit-details-marker{display:none}
+details.section > summary::after{content:'▸';font-size:11px;color:var(--text-3);margin-left:6px}
+details.section[open] > summary::after{content:'▾'}
+
+.scenario-row{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-bottom:1px dashed var(--line)}
+.scenario-row:first-child{padding-top:2px}
+.scenario-row .field{margin-bottom:0}
+.scenario-row .field-label{font-size:9px;letter-spacing:.08em}
+.scenario-row .field input[type=number]{padding:4px 5px;font-size:11px}
+.scenario-row .conditions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.scenario-actions{display:flex;gap:2px;align-items:center}
+.scenario-actions button{background:none;border:none;color:var(--text-3);font-size:13px;padding:0 4px;cursor:pointer;line-height:1;height:24px;border-radius:2px}
+.scenario-actions button:hover{background:var(--bg-elev2);color:var(--text)}
+.scenario-actions button.act-x:hover{color:var(--coast)}
+.scenario-num{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0;vertical-align:middle}
+.scenario-header{grid-column:1 / -1;display:flex;align-items:center;gap:6px;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2);font-weight:600;padding-bottom:2px}
+.scenario-header .scenario-name{flex:1}
+
+.compare-report{margin-top:18px;padding:16px;background:var(--bg-elev);border-radius:2px;border:1px solid var(--line)}
+.compare-report h3{font-family:var(--display);font-weight:700;font-size:14px;margin-bottom:14px}
+.compare-report h4{font-family:var(--display);font-weight:600;font-size:12px;margin:18px 0 8px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2)}
+.compare-report table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.compare-report th,.compare-report td{padding:6px 4px;text-align:right;border-bottom:1px solid var(--line)}
+.compare-report th{font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.08em;font-size:9px}
+.compare-report td:first-child,.compare-report th:first-child{text-align:left}
+.compare-report .target-cell{font-size:10px;color:var(--text-2)}
+.compare-report tr:hover td{background:var(--bg-base)}
+.compare-report .cell-vpr{color:var(--vpr);font-weight:600}
+.compare-report .cell-trn{color:var(--trn);font-weight:600}
+.compare-report .cell-magnav{color:var(--magnav);font-weight:600}
+.compare-report .cell-coast{color:var(--coast);font-weight:600}
+.compare-report p.summary-text{margin-top:14px;font-size:12px;color:var(--text-2);line-height:1.55}
+.compare-report .scenario-pill{display:inline-flex;align-items:center;gap:4px}
+
+.bar-chart{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.bar-row{display:grid;grid-template-columns:160px 1fr 150px;gap:10px;align-items:center;font-size:11px}
+.bar-label{display:flex;align-items:center;gap:6px;color:var(--text-2);min-width:0}
+.bar-label-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{position:relative;height:16px;background:var(--bg-base);border:1px solid var(--line);border-radius:2px;overflow:hidden;display:flex}
+.bar-fix{background:var(--vpr);height:100%}
+.bar-coast{background:var(--coast);height:100%;opacity:.85}
+.bar-whisker{position:absolute;top:50%;height:8px;border-left:2px solid rgba(0,0,0,0.5);border-right:2px solid rgba(0,0,0,0.5);transform:translateY(-50%);pointer-events:none}
+.bar-value{font-family:var(--mono);color:var(--text);text-align:right;font-size:11px}
+.bar-value-coast{color:var(--coast);font-size:10px;margin-left:6px}
+
+.leaflet-container{background:var(--bg-deep);font-family:var(--mono)}
+.leaflet-control-attribution{background:rgba(255,255,255,.92)!important;color:var(--text-3)!important;font-size:9px!important}
+.leaflet-control-attribution a{color:var(--text-2)!important}
+.leaflet-control-zoom a{background:var(--bg-elev)!important;color:var(--text)!important;border:1px solid var(--line)!important}
+
+@media (max-width: 980px) {
+  .app{grid-template-columns:1fr;grid-template-rows:auto auto 60vh auto auto}
+  .header{grid-column:1}
+  .map-wrap{min-height:60vh}
+  .bottom-grid{grid-template-columns:1fr}
+  .bar-row{grid-template-columns:120px 1fr 110px}
+}
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="header">
+    <div>
+      <div class="brand">loc8</div>
+      <div class="brand-sub">digital twin of checkpoint GPS-denied nav, IGA 250 Final project (Catherine Mignone) </div>
+    </div>
+    <div class="hdr-status">
+      <div class="hdr-item"><div class="hdr-label">distance</div><div class="hdr-val" id="hdr-dist">—</div></div>
+      <div class="hdr-item"><div class="hdr-label">checkpoints</div><div class="hdr-val" id="hdr-cps">—</div></div>
+      <div class="hdr-item"><div class="hdr-label">display speed-up</div><div class="hdr-val" id="hdr-speedup">4×</div></div>
+      <div class="hdr-item"><div class="hdr-label">status</div><div class="hdr-val" id="hdr-status">idle</div></div>
+    </div>
+  </header>
+
+  <aside class="left">
+    <div class="section">
+      <div class="section-head"><span>launch</span><span class="section-tag">lat / lng</span></div>
+      <div class="field-grid">
+        <div class="field"><div class="field-label">lat</div><input type="number" id="launch-lat" step="0.0001" value="20.7068"></div>
+        <div class="field"><div class="field-label">lng</div><input type="number" id="launch-lng" step="0.0001" value="116.7244"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span>target</span><span class="section-tag">lat / lng</span></div>
+      <div class="field-grid">
+        <div class="field"><div class="field-label">lat</div><input type="number" id="target-lat" step="0.0001" value="20.5500"></div>
+        <div class="field"><div class="field-label">lng</div><input type="number" id="target-lng" step="0.0001" value="116.9000"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span>conditions</span></div>
+      <div class="field-grid">
+        <div class="field"><div class="field-label">wind speed (mph)</div><input type="number" id="wind-speed" min="0" max="90" step="0.5" value="0"></div>
+        <div class="field"><div class="field-label">wind dir (deg)</div><input type="number" id="wind-dir" min="0" max="359" step="1" value="0"></div>
+      </div>
+      <div style="margin-top:-4px;margin-bottom:8px;font-size:10px;color:var(--text-3)">wind vector: 0° = blowing east (+x), 90° = north (+y); live pulls Open‑Meteo (from‑direction converted)</div>
+      <div class="field"><div class="field-label">cloud cover <span id="cloud-val">15%</span></div><input type="range" id="cloud" min="0" max="1" step="0.05" value="0.15"></div>
+      <div class="toggle-row" style="margin-bottom:4px"><span style="font-size:11px;color:var(--text-2)">live weather @ route midpoint</span><div class="toggle on" id="live-weather"></div></div>
+      <div class="toggle-row"><span style="font-size:11px;color:var(--text-2)">cascade fallback (TRN → MagNav)</span><div class="toggle on" id="recovery"></div></div>
+
+      <details class="advanced">
+        <summary>advanced parameters</summary>
+        <div class="advanced-body">
+          <div class="field"><div class="field-label">drone speed (m/s)</div><input type="number" id="airspeed" min="5" max="120" step="1" value="40"></div>
+          <div class="field"><div class="field-label">leg length <span id="leg-val">800 m</span></div><input type="range" id="leg-m" min="300" max="2000" step="50" value="800"></div>
+          <div class="field"><div class="field-label">imu drift <span id="drift-val">1.2%</span></div><input type="range" id="drift" min="0.005" max="0.04" step="0.001" value="0.012"></div>
+          <div class="field"><div class="field-label">playback speed-up <span id="speed-val">4×</span></div><input type="range" id="speed" min="1" max="12" step="1" value="4"></div>
+          <div class="toggle-row"><span style="font-size:11px;color:var(--text-2)">route: wind + corridor + traffic avoid</span><div class="toggle on" id="realistic-route"></div></div>
+        </div>
+      </details>
+    </div>
+
+    <button class="btn-arm" id="btn-arm">launch mission</button>
+
+    <details class="section" style="margin-top:18px">
+      <summary class="section-head"><span>scenario comparison</span><span class="section-tag">expand to compare</span></summary>
+
+      <div class="preset-grid">
+        <button class="btn-mini" id="preset-calm">Calm</button>
+        <button class="btn-mini" id="preset-monsoon">Monsoon</button>
+        <button class="btn-mini" id="preset-sweep">Sweep</button>
+      </div>
+
+      <div id="scenarios"></div>
+
+      <button class="btn-secondary" id="btn-add-scenario">+ add scenario</button>
+
+      <div class="field-grid" style="margin-top:10px">
+        <div class="field"><div class="field-label">draws / scenario</div><input type="number" id="mc-draws" min="1" max="50" step="1" value="1"></div>
+        <div style="display:flex;align-items:end"><button class="btn-secondary" id="btn-compare" style="margin-top:0">run comparison</button></div>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text-3);line-height:1.4">Draws &gt; 1 runs each scenario as N Monte Carlo replicates with derived seeds; report shows mean ± std dev. Comparison results print below the event stream.</div>
+    </details>
+
+    <div style="margin-top:8px;font-size:11px;color:var(--text-3)">Scroll down for the checkpoint log, event stream, and comparison report.</div>
+  </aside>
+
+  <main class="map-wrap"><div id="map"></div></main>
+
+  <aside class="right">
+    <div class="section">
+      <div class="section-head"><span>cascade legend</span></div>
+      <div class="cascade-legend">
+        <div class="cascade-row"><div class="cascade-swatch vpr"></div><span class="cascade-tier">VPR</span><span>scene match · ~6m · fails on cloud</span></div>
+        <div class="cascade-row"><div class="cascade-swatch trn"></div><span class="cascade-tier">TRN</span><span>terrain-relative · ~28m · p≈.78</span></div>
+        <div class="cascade-row"><div class="cascade-swatch magnav"></div><span class="cascade-tier">MagNav</span><span>magnetic anomaly · ~95m · p≈.88</span></div>
+        <div class="cascade-row"><div class="cascade-swatch coast"></div><span class="cascade-tier">Coast</span><span>inertial only · drift unbounded</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span>summary</span></div>
+      <div class="stats">
+        <div class="stat"><div class="stat-label">fix rate</div><div class="stat-val" id="s-fix">—<span class="stat-unit">%</span></div></div>
+        <div class="stat"><div class="stat-label">vpr</div><div class="stat-val" id="s-vpr">—</div></div>
+        <div class="stat"><div class="stat-label">trn</div><div class="stat-val" id="s-trn">—</div></div>
+        <div class="stat"><div class="stat-label">magnav</div><div class="stat-val" id="s-magnav">—</div></div>
+        <div class="stat"><div class="stat-label">coast</div><div class="stat-val" id="s-coast">—</div></div>
+        <div class="stat"><div class="stat-label">median err</div><div class="stat-val" id="s-med">—<span class="stat-unit">m</span></div></div>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-3);line-height:1.4">Fix rate = any tier reset (VPR + TRN + MagNav). Median across all reset legs; coast legs excluded since drift continues.</div>
+    </div>
+  </aside>
+
+  <section class="bottom">
+    <div class="bottom-grid">
+      <div>
+        <div class="section-head"><span>checkpoint log</span><span class="section-tag" id="cp-count">0/0</span></div>
+        <div class="cp-list" id="cp-list"><div class="empty">no mission flown</div></div>
+      </div>
+      <div>
+        <div class="section-head"><span>event stream</span><span class="section-tag" id="ev-count">0 events</span></div>
+        <div class="events" id="events"><div class="empty">enter coordinates and launch a mission</div></div>
+      </div>
+    </div>
+    <div id="compare-report-host"></div>
+  </section>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+
+// constants
+const R_EARTH_M = 6371000;
+const SAMPLES_PER_LEG = 24;
+const DEFAULT_AIRSPEED_MPS = 40;
+const ANIM_BASE_HZ = 30;
+const MPS_PER_MPH = 0.44704;
+
+// 1-sigma post-fix residuals (m)
+const VPR_RESIDUAL_M = 6;
+const TRN_RESIDUAL_M = 28;
+const MAGNAV_RESIDUAL_M = 95;
+
+// conditional success probabilities
+const P_TRN = 0.78;
+const P_MAGNAV = 0.88;
+
+// scenario palette: avoid cascade hues (green/blue/amber/red) and primary launch (green)
+const PRIMARY_COLOR = '#1F2937';
+const SCENARIO_PALETTE = ['#06B6D4', '#EC4899', '#8B5CF6', '#0891B2', '#D946EF', '#6366F1', '#A855F7', '#BE185D'];
+const scenarioColor = i => i === 0 ? PRIMARY_COLOR : SCENARIO_PALETTE[(i - 1) % SCENARIO_PALETTE.length];
+
+// math
+const toRad = d => d * Math.PI / 180;
+const toDeg = r => r * 180 / Math.PI;
+const norm2 = v => { const m = Math.hypot(v.x, v.y) || 1; return { x: v.x / m, y: v.y / m }; };
+const rotate90 = v => ({ x: -v.y, y: v.x });
+const dot2 = (a, b) => a.x * b.x + a.y * b.y;
+const wrap360 = d => ((d % 360) + 360) % 360;
+const mphToMps = mph => mph * MPS_PER_MPH;
+const mpsToMph = mps => mps / MPS_PER_MPH;
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+function mulberry32(seed) {
+  return function () {
+    let t = (seed += 0x6D2B79F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// FNV-1a, 3-decimal fixed-point
+function hashNumbers(...nums) {
+  let h = 2166136261;
+  for (const n of nums) {
+    let v = Math.round((Number.isFinite(n) ? n : 0) * 1000) | 0;
+    for (let i = 0; i < 4; i++) {
+      h ^= v & 0xff;
+      h = Math.imul(h, 16777619);
+      v >>>= 8;
+    }
+  }
+  return h >>> 0;
+}
+
+// stats
+function summaryStats(values) {
+  if (values.length === 0) return { mean: NaN, std: 0, n: 0, min: NaN, max: NaN };
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
+  return { mean, std: Math.sqrt(variance), n: values.length, min: Math.min(...values), max: Math.max(...values) };
+}
+
+// geo
+function distanceM(a, b) {
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng/2)**2;
+  return 2 * R_EARTH_M * Math.asin(Math.sqrt(x));
+}
+
+function makeFrame(origin) {
+  const cosLat = Math.cos(toRad(origin.lat));
+  return {
+    toLocal:  p => ({ x: toRad(p.lng - origin.lng) * R_EARTH_M * cosLat,
+                      y: toRad(p.lat - origin.lat) * R_EARTH_M }),
+    toLatLng: p => ({ lat: origin.lat + toDeg(p.y / R_EARTH_M),
+                      lng: origin.lng + toDeg(p.x / (R_EARTH_M * cosLat)) }),
+  };
+}
+
+// weather: meteo from-bearing → math blowing-to angle
+function meteoWindToSim(speedMps, fromBearingDeg) {
+  if (!(speedMps > 0) || !Number.isFinite(fromBearingDeg)) {
+    return { windSpeedMps: Math.max(0, speedMps || 0), windDirDeg: 0 };
+  }
+  return { windSpeedMps: speedMps, windDirDeg: wrap360(270 - fromBearingDeg) };
+}
+
+async function fetchLiveWeatherMidpoint(launchLL, targetLL) {
+  const lat = (launchLL.lat + targetLL.lat) / 2;
+  const lng = (launchLL.lng + targetLL.lng) / 2;
+  const qs = new URLSearchParams({
+    latitude: String(lat), longitude: String(lng),
+    current: 'wind_speed_10m,wind_direction_10m,cloud_cover',
+    wind_speed_unit: 'mph',
+  });
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?${qs}`, { credentials: 'omit' });
+  if (!res.ok) throw new Error(`weather HTTP ${res.status}`);
+  const c = (await res.json()).current;
+  if (!c) throw new Error('weather: no current block');
+  const spdMph    = typeof c.wind_speed_10m     === 'number' ? c.wind_speed_10m : 0;
+  const fromDeg   = typeof c.wind_direction_10m === 'number' ? c.wind_direction_10m : 0;
+  const cloudFrac = typeof c.cloud_cover        === 'number' ? clamp(c.cloud_cover / 100, 0, 1) : 0.15;
+  const sim = meteoWindToSim(mphToMps(spdMph), fromDeg);
+  return { lat, lng, ...sim, cloudFrac, rawMeteo: { spdMph, windFromDeg: fromDeg } };
+}
+
+// route
+function straightLineCheckpoints(targetXY, legM) {
+  const total = Math.hypot(targetXY.x, targetXY.y);
+  const n = Math.max(1, Math.round(total / legM));
+  const cps = [];
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    cps.push({ x: targetXY.x * t, y: targetXY.y * t });
+  }
+  return cps;
+}
+
+function placeTrafficDisks(targetXY, along, perp, legM, total, rnd) {
+  const count = Math.min(14, Math.max(2, Math.floor(total / 3500)));
+  const disks = [];
+  for (let i = 0; i < count; i++) {
+    const t = rnd();
+    const cx = targetXY.x * t + along.x * legM * 0.04 * rnd() + perp.x * (rnd() - 0.48) * legM * 1.25;
+    const cy = targetXY.y * t + along.y * legM * 0.04 * rnd() + perp.y * (rnd() - 0.48) * legM * 1.25;
+    const r  = 220 + rnd() * 950;
+    disks.push({ x: cx, y: cy, r });
+  }
+  return disks;
+}
+
+function densifyCorridor(targetXY, perp, weaveAmp, weaveCycles, disks, legM, total) {
+  const n = Math.max(10, Math.min(200, Math.ceil(total / 180)));
+  const dense = [{ x: 0, y: 0 }];
+  for (let k = 1; k <= n; k++) {
+    const t = k / n;
+    const weave = weaveAmp * Math.sin(weaveCycles * Math.PI * 2 * t);
+    let px = targetXY.x * t + perp.x * weave;
+    let py = targetXY.y * t + perp.y * weave;
+
+    let pushX = 0, pushY = 0, pushMag = 0;
+    for (const d of disks) {
+      const dx = px - d.x, dy = py - d.y;
+      const dist = Math.hypot(dx, dy);
+      const margin = d.r + 140;
+      if (dist < margin && dist > 1e-6) {
+        const penetration = margin - dist;
+        pushX += (dx / dist) * penetration;
+        pushY += (dy / dist) * penetration;
+        pushMag += penetration;
+      }
+    }
+    if (pushMag > 0) {
+      const m = Math.hypot(pushX, pushY) || 1;
+      const cap = legM * 0.85;
+      px += (pushX / m) * Math.min(pushMag * 1.05, cap);
+      py += (pushY / m) * Math.min(pushMag * 1.05, cap);
+    }
+    dense.push({ x: px, y: py });
+  }
+  return dense;
+}
+
+function resampleToCheckpoints(densePath, targetXY, legM) {
+  const cps = [{ x: 0, y: 0 }];
+  const march = legM * 0.62;
+  let acc = 0;
+  for (let i = 1; i < densePath.length; i++) {
+    const seg = Math.hypot(densePath[i].x - densePath[i-1].x, densePath[i].y - densePath[i-1].y);
+    acc += seg;
+    if (acc >= march || i === densePath.length - 1) {
+      cps.push(densePath[i]);
+      acc = 0;
+    }
+  }
+  const last = cps[cps.length - 1];
+  if (last.x !== targetXY.x || last.y !== targetXY.y) cps.push({ x: targetXY.x, y: targetXY.y });
+  return cps;
+}
+
+function planRouteLocal(targetXY, legM, params, rnd) {
+  if (!params.realisticRoute) return straightLineCheckpoints(targetXY, legM);
+
+  const total = Math.hypot(targetXY.x, targetXY.y);
+  const along = norm2(targetXY);
+  const perp  = rotate90(along);
+
+  const windV = { x: Math.cos(toRad(params.windDirDeg)) * params.windSpeedMps,
+                  y: Math.sin(toRad(params.windDirDeg)) * params.windSpeedMps };
+  const cross = Math.abs(dot2(windV, perp));
+
+  const weaveAmp    = Math.min(420, 80 + cross * 2.8 + rnd() * 120);
+  const weaveCycles = Math.max(1.2, Math.min(7, Math.round(total / (legM * 1.35))));
+
+  const disks = placeTrafficDisks(targetXY, along, perp, legM, total, rnd);
+  const dense = densifyCorridor(targetXY, perp, weaveAmp, weaveCycles, disks, legM, total);
+  return resampleToCheckpoints(dense, targetXY, legM);
+}
+
+// sim
+function cascadeOutcome(rnd, cloudFrac, recoveryEnabled) {
+  const cloudOccluded = rnd() < cloudFrac;
+  if (!cloudOccluded)                      return { outcome: 'vpr',    residualM: VPR_RESIDUAL_M };
+  if (recoveryEnabled && rnd() < P_TRN)    return { outcome: 'trn',    residualM: TRN_RESIDUAL_M };
+  if (recoveryEnabled && rnd() < P_MAGNAV) return { outcome: 'magnav', residualM: MAGNAV_RESIDUAL_M };
+  return { outcome: 'coast', residualM: null };
+}
+
+function applyFixUncertainty(truth, residualM, rnd) {
+  const ang = rnd() * 2 * Math.PI;
+  const mag = residualM * (rnd() * 0.8 + 0.2);
+  return { x: truth.x + mag * Math.cos(ang), y: truth.y + mag * Math.sin(ang) };
+}
+
+function simulateMission(launch, target, params) {
+  const frame    = makeFrame(launch);
+  const targetXY = frame.toLocal(target);
+  const rndPlan  = mulberry32(params.planSeed);
+  const rndSim   = mulberry32(params.simSeed);
+
+  const checkpoints = planRouteLocal(targetXY, params.legM, params, rndPlan);
+  const windDirRad = toRad(params.windDirDeg);
+  const windVX = Math.cos(windDirRad) * params.windSpeedMps;
+  const windVY = Math.sin(windDirRad) * params.windSpeedMps;
+
+  const samples = [], events = [];
+  let truth = { x: 0, y: 0 }, est = { x: 0, y: 0 }, t = 0;
+
+  checkpoints.forEach((cp, i) => {
+    const dx = cp.x - truth.x, dy = cp.y - truth.y;
+    const legM = Math.hypot(dx, dy);
+    const legTimeS = legM / params.airspeedMps;
+
+    // angular bias ~ sqrt(distance/km), magnitude ~ ±drift
+    const driftAngDeg = (rndSim() - 0.5) * 2 * Math.sqrt(legM / 1000);
+    const driftScale  = 1 + (rndSim() - 0.5) * 2 * params.drift;
+    const c = Math.cos(toRad(driftAngDeg)), s = Math.sin(toRad(driftAngDeg));
+    const eDx = (c * dx - s * dy) * driftScale;
+    const eDy = (s * dx + c * dy) * driftScale;
+
+    const windDx = windVX * legTimeS, windDy = windVY * legTimeS;
+    const t0 = truth, e0 = est;
+    for (let k = 1; k <= SAMPLES_PER_LEG; k++) {
+      const f = k / SAMPLES_PER_LEG;
+      samples.push({
+        t: t + f * legTimeS,
+        truth: { x: t0.x + (dx + windDx) * f, y: t0.y + (dy + windDy) * f },
+        est:   { x: e0.x + eDx * f,           y: e0.y + eDy * f },
+        leg: i, cp: false,
+      });
+    }
+    truth = { x: t0.x + dx + windDx, y: t0.y + dy + windDy };
+    est   = { x: e0.x + eDx,         y: e0.y + eDy };
+    t += legTimeS;
+
+    const driftErrM = Math.hypot(est.x - truth.x, est.y - truth.y);
+    const fix = cascadeOutcome(rndSim, params.cloud, params.recovery);
+    if (fix.residualM !== null) est = applyFixUncertainty(truth, fix.residualM, rndSim);
+    const finalErrM = Math.hypot(est.x - truth.x, est.y - truth.y);
+
+    samples.push({ t, truth, est, leg: i, cp: true, outcome: fix.outcome });
+    events.push({ idx: i, outcome: fix.outcome, driftErrM, finalErrM, cpLocal: cp, t });
+  });
+
+  return { frame, cpsLatLng: checkpoints.map(p => frame.toLatLng(p)), samples, events };
+}
+
+function play(mission, speedMul, onSample, onCheckpoint, onDone) {
+  let i = 0;
+  const tick = () => {
+    if (i >= mission.samples.length) return onDone();
+    const s = mission.samples[i++];
+    const ll = { truth: mission.frame.toLatLng(s.truth), est: mission.frame.toLatLng(s.est) };
+    onSample(s, ll);
+    if (s.cp) onCheckpoint(s, ll, mission.events[s.leg]);
+    setTimeout(tick, 1000 / (ANIM_BASE_HZ * speedMul));
+  };
+  tick();
+}
+
+// map
+const MAP_OUTCOME_COLOR = { vpr: '#22C55E', trn: '#3B82F6', magnav: '#F59E0B', coast: '#EF4444' };
+
+const map = L.map('map', { zoomControl: true, attributionControl: true })
+  .setView([42.3651, -71.0901], 13);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles &copy; Esri', maxZoom: 19,
+}).addTo(map);
+
+// invalidate stale tiles when container resizes
+requestAnimationFrame(() => map.invalidateSize());
+window.addEventListener('load', () => map.invalidateSize());
+const mapWrap = document.querySelector('.map-wrap');
+if (mapWrap && 'ResizeObserver' in window) {
+  new ResizeObserver(() => map.invalidateSize()).observe(mapWrap);
+}
+
+const freshLayerSet = () => ({ plan: null, truth: null, est: null, cps: [], drone: null, launch: null, target: null });
+let layers = freshLayerSet();
+function clearMap() {
+  Object.values(layers).flat().forEach(l => l && map.removeLayer(l));
+  layers = freshLayerSet();
+}
+function dot(latlng, color, r = 6) {
+  return L.circleMarker(latlng, { radius: r, color, weight: 2, fillColor: color, fillOpacity: 0.9 });
+}
+function drawLaunchTarget(launch, target) {
+  layers.launch && map.removeLayer(layers.launch);
+  layers.target && map.removeLayer(layers.target);
+  layers.launch = dot(launch, '#6F8F3A', 8).addTo(map).bindTooltip('Launch');
+  layers.target = dot(target, '#FF2D2D', 8).addTo(map).bindTooltip('Target (Sc 0)');
+}
+function drawPlan(launch, cpsLatLng) {
+  layers.plan && map.removeLayer(layers.plan);
+  layers.plan = L.polyline([launch, ...cpsLatLng],
+    { color: '#2F2F2F', opacity: 0.6, weight: 1, dashArray: '4,4' }).addTo(map);
+  layers.cps.forEach(c => map.removeLayer(c));
+  layers.cps = cpsLatLng.map(ll => dot(ll, '#5C6A7A', 5).addTo(map));
+}
+function updatePaths(truthPath, estPath) {
+  layers.truth && map.removeLayer(layers.truth);
+  layers.est   && map.removeLayer(layers.est);
+  layers.truth = L.polyline(truthPath, { color: '#D4A017', weight: 2, opacity: 0.9 }).addTo(map);
+  layers.est   = L.polyline(estPath,   { color: '#3E6B8A', weight: 2, opacity: 0.9, dashArray: '2,3' }).addTo(map);
+}
+function drawDrone(truthLL, estLL) {
+  if (layers.drone) layers.drone.forEach(l => map.removeLayer(l));
+  layers.drone = [
+    L.circleMarker(truthLL, { radius: 7, color: '#D4A017', weight: 2, fillColor: '#D4A017', fillOpacity: 1 }).addTo(map),
+    L.circleMarker(estLL,   { radius: 5, color: '#3E6B8A', weight: 2, fillColor: 'transparent' }).addTo(map),
+  ];
+}
+function markCheckpoint(idx, latlng, outcome) {
+  if (layers.cps[idx]) map.removeLayer(layers.cps[idx]);
+  layers.cps[idx] = dot(latlng, MAP_OUTCOME_COLOR[outcome], 7).addTo(map);
+}
+
+// ui helpers
+const $ = id => document.getElementById(id);
+const fmtM       = m => m >= 1000 ? (m/1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+const fmtTime    = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
+const readLatLng = (latId, lngId) => ({ lat: parseFloat($(latId).value), lng: parseFloat($(lngId).value) });
+const validLatLng = ll => Number.isFinite(ll.lat) && Number.isFinite(ll.lng) && ll.lat >= -90 && ll.lat <= 90 && ll.lng >= -180 && ll.lng <= 180;
+const tierLabel  = o => ({ vpr: 'VPR fix', trn: 'TRN fallback', magnav: 'MagNav fallback', coast: 'coast (no fix)' }[o] || o);
+
+let flying = false;
+let truthPath = [], estPath = [];
+
+function bindRange(id, valId, fmt) {
+  const el = $(id), out = $(valId);
+  const update = () => out.textContent = fmt(parseFloat(el.value));
+  el.addEventListener('input', update); update();
+}
+
+function addEvent(tag, time, msg) {
+  const el = document.createElement('div');
+  el.className = 'event';
+  el.innerHTML = `<span class="event-t">${time}</span><span class="event-tag ${tag}">${tag}</span><span>${msg}</span>`;
+  const log = $('events');
+  if (log.querySelector('.empty')) log.innerHTML = '';
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  $('ev-count').textContent = `${log.children.length} events`;
+}
+
+function addCheckpointRow(ev) {
+  const errCell = ev.outcome === 'coast'
+    ? `<div class="cp-err" style="color:var(--coast)">coast<span style="color:var(--text-3);font-weight:400"> · ${Math.round(ev.driftErrM)} m drift</span></div>`
+    : `<div class="cp-err">${Math.round(ev.finalErrM)}<span style="color:var(--text-3);font-weight:400"> m</span></div>`;
+  const row = document.createElement('div');
+  row.className = 'cp-row';
+  row.innerHTML = `<div class="cp-dot ${ev.outcome}"></div>
+    <div class="cp-name">cp${String(ev.idx).padStart(2,'0')} · ${ev.outcome}</div>
+    ${errCell}`;
+  $('cp-list').appendChild(row);
+}
+
+function summarize(events) {
+  const counts = { vpr: 0, trn: 0, magnav: 0, coast: 0 };
+  const errs = [];
+  for (const e of events) {
+    counts[e.outcome]++;
+    if (e.outcome !== 'coast') errs.push(e.finalErrM);
+  }
+  errs.sort((a, b) => a - b);
+  const med = errs.length ? errs[Math.floor(errs.length / 2)] : NaN;
+  const total = events.length;
+  const fixed = counts.vpr + counts.trn + counts.magnav;
+
+  $('s-fix').firstChild.textContent    = total ? Math.round(fixed / total * 100) : '—';
+  $('s-vpr').firstChild.textContent    = String(counts.vpr);
+  $('s-trn').firstChild.textContent    = String(counts.trn);
+  $('s-magnav').firstChild.textContent = String(counts.magnav);
+  $('s-coast').firstChild.textContent  = String(counts.coast);
+  $('s-med').firstChild.textContent    = Number.isFinite(med) ? Math.round(med) : '—';
+}
+
+function refreshPreview() {
+  if (flying) return;
+  const launch = readLatLng('launch-lat', 'launch-lng');
+  const target = readLatLng('target-lat', 'target-lng');
+  if (!validLatLng(launch) || !validLatLng(target)) return;
+  drawLaunchTarget(launch, target);
+  const total = distanceM(launch, target);
+  $('hdr-dist').textContent = fmtM(total);
+  $('hdr-cps').textContent  = String(Math.max(1, Math.round(total / parseFloat($('leg-m').value))));
+  map.fitBounds(L.latLngBounds([launch, target]).pad(0.3));
+}
+
+// arm: validate → reset → live wx → params → simulate → animate
+function resetMissionUi(btn) {
+  clearMap();
+  $('cp-list').innerHTML = '';
+  $('events').innerHTML  = '';
+  ['s-fix','s-vpr','s-trn','s-magnav','s-coast','s-med'].forEach(id => $(id).firstChild.textContent = '—');
+  truthPath = []; estPath = [];
+  btn.disabled = true; btn.classList.add('flying'); btn.textContent = 'in flight';
+}
+
+function finishMissionUi(btn) {
+  btn.disabled = false; btn.classList.remove('flying'); btn.textContent = 'launch mission';
+}
+
+async function pullLiveWeatherIfEnabled(launch, target) {
+  if (!$('live-weather').classList.contains('on')) return '';
+  $('hdr-status').textContent = 'weather';
+  try {
+    const w = await fetchLiveWeatherMidpoint(launch, target);
+    const wsMphClamped = clamp(mpsToMph(w.windSpeedMps), 0, 90);
+    $('wind-speed').value = String(Number(wsMphClamped.toFixed(1)));
+    $('wind-dir').value   = String(Math.round(w.windDirDeg));
+
+    const cloudStep = parseFloat($('cloud').step) || 0.05;
+    const cloudFrac = clamp(Math.round(w.cloudFrac / cloudStep) * cloudStep, 0, 1);
+    $('cloud').value = String(cloudFrac);
+    $('cloud').dispatchEvent(new Event('input', { bubbles: true }));
+
+    return `live wx (Open‑Meteo, mid ${w.lat.toFixed(3)}°, ${w.lng.toFixed(3)}°): from ${Math.round(w.rawMeteo.windFromDeg)}° @ ${w.rawMeteo.spdMph.toFixed(1)} mph → sim ${wsMphClamped.toFixed(1)} mph · ${Math.round(w.windDirDeg)}°; cloud ~${Math.round(w.cloudFrac * 100)}%. Traffic bands are synthesized (ADS‑B is not browser‑callable). — `;
+  } catch (err) {
+    addEvent('plan', '—', `live weather failed: ${err.message} — using manual wind/cloud`);
+    return '';
+  }
+}
+
+function readMissionParams(launch, target, opts = {}) {
+  const windSpeedMph = Math.max(0, parseFloat($('wind-speed').value) || 0);
+  const windSpeedMps = mphToMps(windSpeedMph);
+  const windDirDeg   = wrap360(parseFloat($('wind-dir').value) || 0);
+  const cloudFrac    = parseFloat($('cloud').value);
+  const drawIdx      = opts.drawIdx ?? 0;
+  return {
+    airspeedMps:    Math.max(1, parseFloat($('airspeed').value) || DEFAULT_AIRSPEED_MPS),
+    windSpeedMph, windSpeedMps, windDirDeg,
+    legM:           parseFloat($('leg-m').value),
+    drift:          parseFloat($('drift').value),
+    cloud:          cloudFrac,
+    recovery:       $('recovery').classList.contains('on'),
+    realisticRoute: $('realistic-route').classList.contains('on'),
+    planSeed: hashNumbers(launch.lat, launch.lng, target.lat, target.lng),
+    simSeed:  hashNumbers(launch.lat, launch.lng, target.lat, target.lng,
+                          windSpeedMps, windDirDeg, cloudFrac, drawIdx),
+  };
+}
+
+function logPlanningEvent(launch, target, mission, params, wxNote) {
+  const speedupX = parseFloat($('speed').value);
+  const cascadeNote = params.recovery ? 'cascade VPR→TRN→MagNav→coast' : 'cascade disabled (VPR→coast)';
+  const routeNote = params.realisticRoute ? 'corridor + traffic avoidance' : 'great‑circle checkpoints';
+  addEvent('plan', '0s',
+    `${wxNote}${routeNote} · planned ${mission.events.length} legs across ${fmtM(distanceM(launch, target))} ` +
+    `at ${params.airspeedMps.toFixed(0)} m/s; wind ${params.windSpeedMph.toFixed(1)} mph @ ${Math.round(params.windDirDeg)}° · ` +
+    `${cascadeNote} · display ${speedupX}× · simSeed 0x${params.simSeed.toString(16)}`
+  );
+}
+
+function runMissionAnimation(mission, onComplete) {
+  let cpsDone = 0;
+  play(mission, parseFloat($('speed').value),
+    (s, ll) => {
+      truthPath.push(ll.truth); estPath.push(ll.est);
+      updatePaths(truthPath, estPath);
+      drawDrone(ll.truth, ll.est);
+    },
+    (s, ll, ev) => {
+      cpsDone++;
+      $('cp-count').textContent = `${cpsDone}/${mission.events.length}`;
+      markCheckpoint(ev.idx, ll.truth, ev.outcome);
+      addCheckpointRow(ev);
+      const errStr = ev.outcome === 'coast'
+        ? `drift ${Math.round(ev.driftErrM)}m · no fix · coasting`
+        : `drift ${Math.round(ev.driftErrM)}m → final ${Math.round(ev.finalErrM)}m`;
+      addEvent(ev.outcome, fmtTime(ev.t), `cp${ev.idx} ${tierLabel(ev.outcome)} · ${errStr}`);
+    },
+    onComplete,
+  );
+}
+
+$('btn-arm').addEventListener('click', async () => {
+  if (flying) return;
+  const launch = readLatLng('launch-lat', 'launch-lng');
+  const target = readLatLng('target-lat', 'target-lng');
+  if (!validLatLng(launch) || !validLatLng(target)) {
+    addEvent('plan', '—', 'invalid coordinates'); return;
+  }
+
+  flying = true;
+  const btn = $('btn-arm');
+  resetMissionUi(btn);
+  drawLaunchTarget(launch, target);
+
+  const wxNote = await pullLiveWeatherIfEnabled(launch, target);
+  $('hdr-status').textContent = 'flight';
+
+  const params  = readMissionParams(launch, target);
+  const mission = simulateMission(launch, target, params);
+
+  drawPlan(launch, mission.cpsLatLng);
+  $('hdr-cps').textContent  = String(mission.events.length);
+  $('cp-count').textContent = `0/${mission.events.length}`;
+  logPlanningEvent(launch, target, mission, params, wxNote);
+
+  runMissionAnimation(mission, () => {
+    flying = false;
+    finishMissionUi(btn);
+    $('hdr-status').textContent = 'complete';
+    summarize(mission.events);
+    const tEnd = mission.events[mission.events.length - 1].t;
+    addEvent('done', fmtTime(tEnd), 'mission complete');
+  });
+});
+
+// scenarios
+let scenarios = [];
+let nextScenarioId = 1;
+
+function makeScenario(prefill) {
+  const base = prefill || {
+    windMph:   parseFloat($('wind-speed').value) || 0,
+    windDir:   parseFloat($('wind-dir').value)   || 0,
+    cloudFrac: parseFloat($('cloud').value),
+  };
+  return { id: nextScenarioId++, ...base };
+}
+
+function addScenario(prefill) {
+  scenarios.push(makeScenario(prefill));
+  renderScenarios();
+}
+
+function removeScenario(id) {
+  scenarios = scenarios.filter(s => s.id !== id);
+  renderScenarios();
+}
+
+function duplicateScenario(id) {
+  const src = scenarios.find(s => s.id === id);
+  if (!src) return;
+  const idx = scenarios.findIndex(s => s.id === id);
+  const copy = { ...src, id: nextScenarioId++ };
+  scenarios.splice(idx + 1, 0, copy);
+  renderScenarios();
+}
+
+function playScenario(id) {
+  const s = scenarios.find(x => x.id === id);
+  if (!s) return;
+  $('wind-speed').value = String(s.windMph);
+  $('wind-dir').value   = String(s.windDir);
+  if (Number.isFinite(s.cloudFrac)) {
+    $('cloud').value = String(s.cloudFrac);
+    $('cloud').dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  refreshPreview();
+  $('btn-arm').click();
+}
+
+function validateScenarioInput(input, scenario) {
+  const v = parseFloat(input.value);
+  const k = input.dataset.k;
+  let ok = Number.isFinite(v);
+  if (ok && k === 'windMph')  ok = v >= 0 && v <= 200;
+  if (ok && k === 'windDir')  ok = v >= 0 && v < 360;
+  if (ok && k === 'cloudPct') ok = v >= 0 && v <= 100;
+  input.classList.toggle('invalid', !ok);
+  if (ok) {
+    if (k === 'cloudPct') scenario.cloudFrac = v / 100;
+    else scenario[k] = v;
+  }
+  return ok;
+}
+
+function renderScenarios() {
+  const host = $('scenarios');
+  host.innerHTML = '';
+  if (scenarios.length === 0) {
+    host.innerHTML = '<div class="empty">no scenarios — add one or pick a preset</div>';
+    return;
+  }
+  scenarios.forEach((s, i) => {
+    const num = i + 1;
+    const color = scenarioColor(num);
+    const cloudPct = Math.round((s.cloudFrac ?? 0.15) * 100);
+    const row = document.createElement('div');
+    row.className = 'scenario-row';
+    row.innerHTML = `
+      <div class="scenario-header">
+        <span class="scenario-num" style="background:${color}"></span>
+        <span class="scenario-name">Sc ${num}</span>
+        <div class="scenario-actions">
+          <button class="act-play" title="play this scenario as primary mission" data-id="${s.id}">▶</button>
+          <button class="act-dup"  title="duplicate" data-id="${s.id}">⎘</button>
+          <button class="act-x"    title="remove" data-id="${s.id}">×</button>
+        </div>
+      </div>
+      <div class="conditions">
+        <div class="field"><div class="field-label">wind mph</div><input type="number" min="0" max="200" step="0.5" value="${s.windMph}" data-k="windMph"></div>
+        <div class="field"><div class="field-label">dir°</div><input type="number" min="0" max="359" step="1" value="${s.windDir}" data-k="windDir"></div>
+        <div class="field"><div class="field-label">cloud %</div><input type="number" min="0" max="100" step="5" value="${cloudPct}" data-k="cloudPct"></div>
+      </div>
+    `;
+    row.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', () => validateScenarioInput(inp, s));
+    });
+    row.querySelector('.act-x').addEventListener('click', e => removeScenario(parseInt(e.target.dataset.id)));
+    row.querySelector('.act-dup').addEventListener('click', e => duplicateScenario(parseInt(e.target.dataset.id)));
+    row.querySelector('.act-play').addEventListener('click', e => playScenario(parseInt(e.target.dataset.id)));
+    host.appendChild(row);
+  });
+}
+
+function buildScenarioParams(launch, target, scenario, baseParams, drawIdx) {
+  const windSpeedMps = mphToMps(scenario.windMph);
+  const windDirDeg   = wrap360(scenario.windDir);
+  const cloudFrac    = Number.isFinite(scenario.cloudFrac) ? scenario.cloudFrac : baseParams.cloud;
+  return {
+    params: {
+      ...baseParams,
+      windSpeedMph: scenario.windMph,
+      windSpeedMps, windDirDeg,
+      cloud: cloudFrac,
+      planSeed: hashNumbers(launch.lat, launch.lng, target.lat, target.lng),
+      simSeed:  hashNumbers(launch.lat, launch.lng, target.lat, target.lng,
+                            windSpeedMps, windDirDeg, cloudFrac, drawIdx),
+    },
+  };
+}
+
+// summarize a single mission as raw counts
+function tallyMission(mission, distM, scenario, target, params) {
+  const counts = { vpr: 0, trn: 0, magnav: 0, coast: 0 };
+  const errs = [], drifts = [];
+  for (const e of mission.events) {
+    counts[e.outcome]++;
+    if (e.outcome !== 'coast') errs.push(e.finalErrM);
+    if (e.outcome === 'coast') drifts.push(e.driftErrM);
+  }
+  errs.sort((a, b) => a - b);
+  const total = mission.events.length;
+  const fixed = counts.vpr + counts.trn + counts.magnav;
+  const tEnd = total > 0 ? mission.events[total - 1].t : 0;
+  return {
+    legCount: total,
+    fixRatePct: total ? (fixed / total * 100) : 0,
+    counts,
+    medianErrM: errs.length ? errs[Math.floor(errs.length / 2)] : NaN,
+    maxDriftM:  drifts.length ? Math.max(...drifts) : 0,
+    timeMin: tEnd / 60,
+  };
+}
+
+function aggregateDraws(draws) {
+  // for vector metrics return summaryStats; for tier counts, mean per outcome
+  const fix = summaryStats(draws.map(d => d.fixRatePct));
+  const med = summaryStats(draws.map(d => d.medianErrM).filter(v => Number.isFinite(v)));
+  const drift = summaryStats(draws.map(d => d.maxDriftM));
+  const time = summaryStats(draws.map(d => d.timeMin));
+  const counts = { vpr: 0, trn: 0, magnav: 0, coast: 0 };
+  for (const d of draws) {
+    for (const k of Object.keys(counts)) counts[k] += d.counts[k];
+  }
+  for (const k of Object.keys(counts)) counts[k] = counts[k] / draws.length;
+  return { fix, med, drift, time, counts, legCount: draws[0].legCount, n: draws.length };
+}
+
+function runScenarioWithDraws(launch, target, scenario, baseParams, draws) {
+  if (!validLatLng(target)) return null;
+  const distM = distanceM(launch, target);
+  const runs = [];
+  for (let d = 0; d < draws; d++) {
+    const { params } = buildScenarioParams(launch, target, scenario, baseParams, d);
+    const mission = simulateMission(launch, target, params);
+    runs.push(tallyMission(mission, distM, scenario, target, params));
+  }
+  return { scenario, target, distM, agg: aggregateDraws(runs) };
+}
+
+function fmtMeanStd(stat, decimals = 0, suffix = '') {
+  if (!stat || stat.n === 0 || !Number.isFinite(stat.mean)) return '—';
+  const m = stat.mean.toFixed(decimals);
+  if (stat.n < 2 || stat.std < 0.5) return `${m}${suffix}`;
+  return `${m} ± ${stat.std.toFixed(decimals)}${suffix}`;
+}
+
+function compareReportHtml(results, draws) {
+  if (results.length === 0) return '';
+
+  // bar chart: each bar shows fix vs coast as a 100% stacked horizontal
+  const barRows = results.map((r, i) => {
+    const num = i;  // 0 = current, 1+ = scenarios
+    const color = scenarioColor(num);
+    const label = num === 0 ? 'Sc 0 (current)' : `Sc ${num}`;
+    const fixPct = r.agg.fix.mean;
+    const coastPct = 100 - fixPct;
+    const stdSpan = r.agg.fix.n > 1 ? r.agg.fix.std : 0;
+    const whiskerLeft = clamp(fixPct - stdSpan, 0, 100);
+    const whiskerWidth = clamp(stdSpan * 2, 0, 100 - whiskerLeft);
+    const whisker = stdSpan > 0.5
+      ? `<div class="bar-whisker" style="left:${whiskerLeft}%;width:${whiskerWidth}%"></div>`
+      : '';
+    const coastN = (r.agg.counts.coast).toFixed(r.agg.n > 1 ? 1 : 0);
+    return `
+      <div class="bar-row">
+        <div class="bar-label">
+          <span class="scenario-num" style="background:${color}"></span>
+          <span class="bar-label-text">${label}</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fix"   style="width:${fixPct.toFixed(1)}%"></div>
+          <div class="bar-coast" style="width:${coastPct.toFixed(1)}%"></div>
+          ${whisker}
+        </div>
+        <div class="bar-value">
+          ${fmtMeanStd(r.agg.fix, 0, '%')}
+          <span class="bar-value-coast">· ${coastN} coast</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // table rows
+  const tableRows = results.map((r, i) => {
+    const num = i;
+    const color = scenarioColor(num);
+    const label = num === 0 ? 'current' : `Sc ${num}`;
+    const c = r.agg.counts;
+    const fmtCount = v => r.agg.n > 1 ? v.toFixed(1) : Math.round(v);
+    return `<tr>
+      <td><span class="scenario-pill"><span class="scenario-num" style="background:${color}"></span>${label}</span></td>
+      <td>${r.scenario.windMph.toFixed(1)} @ ${Math.round(r.scenario.windDir)}°</td>
+      <td>${Math.round((r.scenario.cloudFrac ?? 0) * 100)}%</td>
+      <td>${fmtMeanStd(r.agg.fix, 0, '%')}</td>
+      <td class="cell-vpr">${fmtCount(c.vpr)}</td>
+      <td class="cell-trn">${fmtCount(c.trn)}</td>
+      <td class="cell-magnav">${fmtCount(c.magnav)}</td>
+      <td class="cell-coast">${fmtCount(c.coast)}</td>
+      <td>${fmtMeanStd(r.agg.med, 0)}</td>
+      <td>${fmtMeanStd(r.agg.drift, 0)}</td>
+      <td>${fmtMeanStd(r.agg.time, 1)}</td>
+    </tr>`;
+  }).join('');
+
+  // summary paragraph
+  const fixMeans = results.map(r => r.agg.fix.mean);
+  const coastMeans = results.map(r => r.agg.counts.coast);
+  const medMeans = results.map(r => r.agg.med.mean).filter(v => Number.isFinite(v));
+  const bestI = fixMeans.indexOf(Math.max(...fixMeans));
+  const worstI = fixMeans.indexOf(Math.min(...fixMeans));
+  const drawNote = draws > 1 ? ` (${draws} Monte Carlo draws per scenario)` : '';
+  const summary = results.length === 1
+    ? `Single scenario simulated${drawNote}. Fix rate ${fmtMeanStd(results[0].agg.fix, 0, '%')}, median residual ${medMeans.length ? Math.round(medMeans[0]) + 'm' : 'n/a'}, ${coastMeans[0].toFixed(draws > 1 ? 1 : 0)} coast leg(s).`
+    : `Across ${results.length} scenarios${drawNote}: fix rate ranged ${Math.round(Math.min(...fixMeans))}–${Math.round(Math.max(...fixMeans))}%; ` +
+      `Sc ${bestI} performed best (${Math.round(fixMeans[bestI])}%), Sc ${worstI} worst (${Math.round(fixMeans[worstI])}%). ` +
+      (medMeans.length ? `Median residual on reset legs ranged ${Math.round(Math.min(...medMeans))}–${Math.round(Math.max(...medMeans))}m. ` : '') +
+      `Coast count ranged ${Math.min(...coastMeans).toFixed(draws > 1 ? 1 : 0)}–${Math.max(...coastMeans).toFixed(draws > 1 ? 1 : 0)}.` +
+      (draws > 1 ? ` Variance bands shown as ± std dev across draws.` : ` Single draw — increase draws/scenario for variance bands.`);
+
+  const sharedTarget = results[0]?.target;
+  const sharedDistKm = results[0] ? (results[0].distM / 1000).toFixed(2) : '—';
+  const launchLL = readLatLng('launch-lat', 'launch-lng');
+  const missionHeader = sharedTarget && validLatLng(launchLL)
+    ? `<p class="summary-text" style="margin-top:0;margin-bottom:14px"><strong>Mission:</strong> ${launchLL.lat.toFixed(4)}, ${launchLL.lng.toFixed(4)} → ${sharedTarget.lat.toFixed(4)}, ${sharedTarget.lng.toFixed(4)} · ${sharedDistKm} km. Same launch and target across all scenarios; only weather varies.</p>`
+    : '';
+
+  return `
+    <div class="compare-report">
+      <h3>scenario comparison report</h3>
+      ${missionHeader}
+      <h4>fix rate (with coast share)</h4>
+      <div class="bar-chart">${barRows}</div>
+      <h4>full results</h4>
+      <table>
+        <thead><tr>
+          <th>#</th><th>wind</th><th>cloud</th>
+          <th>fix %</th><th>vpr</th><th>trn</th><th>magnav</th><th>coast</th>
+          <th>med m</th><th>max drift m</th><th>min</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      <p class="summary-text">${summary}</p>
+    </div>
+  `;
+}
+
+// presets
+function applyPreset(presetName) {
+  const setVal = (id, v) => { $(id).value = String(v); $(id).dispatchEvent(new Event('input', { bubbles: true })); };
+
+  if (presetName === 'calm') {
+    setVal('wind-speed', 5);
+    setVal('wind-dir', 90);
+    setVal('cloud', 0.1);
+    scenarios = [
+      makeScenario({ windMph: 5,  windDir: 90,  cloudFrac: 0.10 }),
+      makeScenario({ windMph: 10, windDir: 90,  cloudFrac: 0.20 }),
+    ];
+  } else if (presetName === 'monsoon') {
+    setVal('wind-speed', 35);
+    setVal('wind-dir', 180);
+    setVal('cloud', 0.85);
+    scenarios = [
+      makeScenario({ windMph: 35, windDir: 180, cloudFrac: 0.85 }),
+      makeScenario({ windMph: 45, windDir: 180, cloudFrac: 0.90 }),
+      makeScenario({ windMph: 30, windDir: 200, cloudFrac: 0.75 }),
+    ];
+  } else if (presetName === 'sweep') {
+    setVal('wind-speed', 15);
+    setVal('wind-dir', 90);
+    setVal('cloud', 0.4);
+    scenarios = [
+      makeScenario({ windMph: 5,  windDir: 90,  cloudFrac: 0.10 }),
+      makeScenario({ windMph: 15, windDir: 180, cloudFrac: 0.40 }),
+      makeScenario({ windMph: 35, windDir: 200, cloudFrac: 0.85 }),
+    ];
+  }
+  renderScenarios();
+  refreshPreview();
+}
+
+$('btn-add-scenario').addEventListener('click', () => addScenario());
+$('preset-calm').addEventListener('click', () => applyPreset('calm'));
+$('preset-monsoon').addEventListener('click', () => applyPreset('monsoon'));
+$('preset-sweep').addEventListener('click', () => applyPreset('sweep'));
+
+$('btn-compare').addEventListener('click', () => {
+  if (flying) return;
+  const launch = readLatLng('launch-lat', 'launch-lng');
+  const target = readLatLng('target-lat', 'target-lng');
+  const host = $('compare-report-host');
+  if (!validLatLng(launch)) {
+    host.innerHTML = '<div class="compare-report"><p class="summary-text">invalid launch coordinates</p></div>';
+    return;
+  }
+  if (!validLatLng(target)) {
+    host.innerHTML = '<div class="compare-report"><p class="summary-text">invalid primary target — fix or remove to compare</p></div>';
+    return;
+  }
+  const draws = clamp(parseInt($('mc-draws').value) || 1, 1, 50);
+  const baseParams = {
+    airspeedMps:    Math.max(1, parseFloat($('airspeed').value) || DEFAULT_AIRSPEED_MPS),
+    legM:           parseFloat($('leg-m').value),
+    drift:          parseFloat($('drift').value),
+    cloud:          parseFloat($('cloud').value),
+    recovery:       $('recovery').classList.contains('on'),
+    realisticRoute: $('realistic-route').classList.contains('on'),
+  };
+
+  // Sc 0 = primary (current conditions, same target as all scenarios)
+  const primaryScenario = {
+    id: 0,
+    windMph: parseFloat($('wind-speed').value) || 0,
+    windDir: parseFloat($('wind-dir').value)   || 0,
+    cloudFrac: parseFloat($('cloud').value),
+  };
+
+  const allScenarios = [primaryScenario, ...scenarios];
+  const results = allScenarios
+    .map(s => runScenarioWithDraws(launch, target, s, baseParams, draws))
+    .filter(r => r !== null);
+
+  if (results.length === 0) {
+    host.innerHTML = '<div class="compare-report"><p class="summary-text">no valid scenarios to compare</p></div>';
+    return;
+  }
+
+  host.innerHTML = compareReportHtml(results, draws);
+  host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// init
+bindRange('leg-m', 'leg-val',   v => v + ' m');
+bindRange('drift', 'drift-val', v => (v*100).toFixed(1) + '%');
+bindRange('cloud', 'cloud-val', v => Math.round(v*100) + '%');
+bindRange('speed', 'speed-val', v => v + '×');
+$('speed').addEventListener('input', () => $('hdr-speedup').textContent = $('speed').value + '×');
+$('hdr-speedup').textContent = $('speed').value + '×';
+
+['recovery', 'live-weather', 'realistic-route'].forEach(id =>
+  $(id).addEventListener('click', e => e.currentTarget.classList.toggle('on'))
+);
+['launch-lat','launch-lng','target-lat','target-lng'].forEach(id =>
+  $(id).addEventListener('change', refreshPreview)
+);
+$('leg-m').addEventListener('input', refreshPreview);
+refreshPreview();
+
+</script>
+</body>
+</html>
